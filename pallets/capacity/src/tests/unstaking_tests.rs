@@ -164,7 +164,7 @@ fn unstake_errors_not_a_staking_account() {
 }
 
 // TODO: when resuming reward pool branch
-// #[test]
+#[test]
 fn unstake_provider_boosted_target_adjusts_reward_pool_total() {
 	new_test_ext().execute_with(|| {
 		// two accounts staking to the same target
@@ -193,9 +193,23 @@ fn unstake_provider_boosted_target_adjusts_reward_pool_total() {
 }
 
 // TODO: when resuming reward pool branch
-// #[test]
+#[test]
 fn unstake_provider_boosted_target_updates_staking_account_history() {
 	new_test_ext().execute_with(|| {
 		assert!(false);
 	});
+}
+
+#[test]
+fn unstake_when_both_types_of_staking_correctly_updates_lock_values() {
+	new_test_ext().execute_with(|| {
+		assert!(false);
+	})
+}
+
+#[test]
+fn unstake_provider_boosted_target_adds_to_common_unlock_chunks() {
+	new_test_ext().execute_with(|| {
+		assert!(false);
+	})
 }

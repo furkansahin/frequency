@@ -5,7 +5,7 @@ use common_primitives::capacity::{StakingType, StakingType::MaximumCapacity};
 #[allow(unused)]
 use sp_runtime::traits::SignedExtension;
 
-use crate::{BalanceOf, CapacityDetails, Config, Event};
+use crate::*;
 use common_primitives::msa::MessageSourceId;
 
 pub fn staking_events() -> Vec<Event<Test>> {
@@ -88,4 +88,34 @@ pub fn setup_provider(
 		assert_eq!(target.amount, *amount);
 		assert_eq!(target.staking_type, staking_type);
 	}
+}
+
+
+pub fn assert_capacity_and_target_details(
+	target: &MessageSourceId,
+	expected_target_token: u64,
+	expected_capacity: u64,
+	staker: &u64,
+) {
+	let capacity_details = Capacity::get_capacity_for(&target).unwrap();
+
+	assert_eq!(capacity_details.remaining_capacity, expected_capacity);
+	assert_eq!(capacity_details.total_capacity_issued, expected_capacity);
+	assert_eq!(capacity_details.last_replenished_epoch, 0);
+
+	let target_details = Capacity::get_target_for(&staker, &target).unwrap();
+
+	assert_eq!(target_details.amount, expected_target_token);
+	assert_eq!(target_details.capacity, expected_capacity);
+}
+
+pub fn set_era_and_reward_pool_at_block(current_era: u32, era_start: u32, current_block: u32, amount: u64) {
+	let initial_rpi: RewardPoolInfo<BalanceOf<Test>> = RewardPoolInfo {
+		total_staked_token: amount,
+		total_reward_pool: 0,
+		unclaimed_balance: 0,
+	};
+	StakingRewardPool::<Test>::insert(current_era, initial_rpi);
+	CurrentEraInfo::<Test>::set(RewardEraInfo { era_index: current_era, started_at: era_start });
+	System::set_block_number(current_block);
 }

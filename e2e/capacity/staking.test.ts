@@ -288,7 +288,7 @@ describe("Capacity Staking Tests", function () {
 
         before(async function () {
             stakeKeys = createKeys("StakeKeysProvider");
-``            stakeProviderId = await createMsaAndProvider(fundingSource, stakeKeys, "SPBoost", accountBalance);
+            stakeProviderId = await createMsaAndProvider(fundingSource, stakeKeys, "SPBoost", accountBalance);
         });
 
         it('works, happy path', async () => {

@@ -48,6 +48,7 @@
 	rustdoc::invalid_codeblock_attributes,
 	missing_docs
 )]
+
 use sp_std::ops::{Add, Mul};
 
 use frame_support::{
@@ -708,6 +709,7 @@ impl<T: Config> Pallet<T> {
 		Self::set_boosting_account(staker, boosting_account_details);
 		Self::set_target_details_for(staker, target, &target_details);
 		Self::set_capacity_for(target, &capacity_details);
+		Self::add_to_reward_pool(*amount)?;
 
 		Ok(capacity)
 	}
@@ -908,10 +910,6 @@ impl<T: Config> Pallet<T> {
 				era_index: current_era_info.era_index.saturating_add(One::one()),
 				started_at: current_block,
 			};
-
-			let current_reward_pool_info =
-				Self::get_reward_pool_for_era(current_era_info.era_index).unwrap_or_default(); // 1r
-
 			let past_eras_max = T::StakingRewardsPastErasMax::get();
 			let entries: u32 = StakingRewardPool::<T>::count(); // 1r
 
@@ -922,20 +920,30 @@ impl<T: Config> Pallet<T> {
 			}
 			CurrentEraInfo::<T>::set(new_era_info); // 1w
 
+			let current_reward_pool_info =
+				Self::get_reward_pool_for_era(current_era_info.era_index).unwrap_or_default(); // 1r
+
 			let total_reward_pool =
 				T::RewardsProvider::reward_pool_size(current_reward_pool_info.total_staked_token);
-			let new_reward_pool = RewardPoolInfo {
+
+			let updated_reward_pool_info: RewardPoolInfo<BalanceOf<T>> = RewardPoolInfo {
 				total_staked_token: current_reward_pool_info.total_staked_token,
 				total_reward_pool,
-				unclaimed_balance: total_reward_pool,
+				unclaimed_balance: total_reward_pool.clone()
 			};
-			StakingRewardPool::<T>::insert(new_era_info.era_index, new_reward_pool); // 1w
+			StakingRewardPool::<T>::set(current_era_info.era_index, Some(updated_reward_pool_info)); // 1w
+
+			StakingRewardPool::<T>::insert(new_era_info.era_index, RewardPoolInfo {
+				total_staked_token: current_reward_pool_info.total_staked_token.clone(),
+				total_reward_pool: Zero::zero(),
+				unclaimed_balance: Zero::zero(),
+			}); // 1w
 
 			T::WeightInfo::on_initialize()
 				.saturating_add(T::DbWeight::get().reads(3))
-				.saturating_add(T::DbWeight::get().writes(3))
+				.saturating_add(T::DbWeight::get().writes(4))
 		} else {
-			T::DbWeight::get().reads(1)
+			T::DbWeight::get().reads(2)
 		}
 	}
 
@@ -994,6 +1002,17 @@ impl<T: Config> Pallet<T> {
 		Self::set_target_details_for(staker, to_msa, &to_msa_target);
 		Self::set_capacity_for(to_msa, &capacity_details);
 		Ok(())
+	}
+
+	fn add_to_reward_pool(amount: BalanceOf<T>) -> Result<(), DispatchError>{
+		let current_era = Self::get_current_era().era_index;
+		StakingRewardPool::<T>::try_mutate_exists(current_era, |info_result| {
+			ensure!(info_result.is_some(), Error::<T>::EraOutOfRange);
+			let mut reward_pool_info: RewardPoolInfo<BalanceOf<T>> = info_result.take().unwrap();
+			reward_pool_info.total_staked_token = reward_pool_info.total_staked_token.saturating_add(amount);
+			*info_result = Some(reward_pool_info);
+			Ok(())
+		})
 	}
 }
 

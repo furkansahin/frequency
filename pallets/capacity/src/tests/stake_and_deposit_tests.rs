@@ -1,14 +1,6 @@
 use super::{mock::*, testing_utils::*};
-use crate::{
-	BalanceOf, BoostingAccountDetails, CapacityDetails, Error, Event, StakingAccountDetails,
-};
-use common_primitives::{
-	capacity::{
-		Nontransferable, StakingType,
-		StakingType::{MaximumCapacity, ProviderBoost},
-	},
-	msa::MessageSourceId,
-};
+use crate::{BalanceOf, CapacityDetails, Error, Event, StakingAccountDetails};
+use common_primitives::{ capacity::Nontransferable, msa::MessageSourceId};
 use frame_support::{assert_noop, assert_ok, traits::WithdrawReasons};
 use sp_runtime::ArithmeticError;
 
@@ -370,24 +362,6 @@ fn ensure_can_stake_is_successful() {
 	});
 }
 
-fn assert_capacity_and_target_details(
-	target: &MessageSourceId,
-	expected_target_token: u64,
-	expected_capacity: u64,
-	staker: &u64,
-) {
-	let capacity_details = Capacity::get_capacity_for(&target).unwrap();
-
-	assert_eq!(capacity_details.remaining_capacity, expected_capacity);
-	assert_eq!(capacity_details.total_capacity_issued, expected_capacity);
-	assert_eq!(capacity_details.last_replenished_epoch, 0);
-
-	let target_details = Capacity::get_target_for(&staker, &target).unwrap();
-
-	assert_eq!(target_details.amount, expected_target_token);
-	assert_eq!(target_details.capacity, expected_capacity);
-}
-
 // for tests of Capacity::increase_stake_and_issue_capacity
 // increases stake and issues capacity, then asserts expected amounts.
 fn assert_successful_increase_stake(
@@ -420,39 +394,6 @@ fn increase_stake_and_issue_capacity_happy_path() {
 	});
 }
 
-// for tests of Capacity::increase_stake_and_issue_capacity
-// increases stake and issues capacity, then asserts expected amounts.
-fn assert_successful_increase_boost(
-	target: MessageSourceId,
-	staked: u64,
-	expected_target_token: u64,
-	expected_capacity: u64,
-) {
-	let staker = 10_000; // has 10_000 token
-	let mut boost_account = BoostingAccountDetails::<Test>::default();
-
-	assert_ok!(Capacity::increase_stake_and_issue_boost(
-		&staker,
-		&mut boost_account,
-		&target,
-		&staked,
-	));
-
-	assert_eq!(boost_account.staking_details.total, staked);
-	assert_eq!(boost_account.staking_details.active, staked);
-	assert_eq!(boost_account.staking_details.unlocking.len(), 0);
-
-	assert_capacity_and_target_details(&target, expected_target_token, expected_capacity, &staker);
-}
-
-#[test]
-fn increase_boost_and_issue_capacity_happy_path() {
-	new_test_ext().execute_with(|| {
-		assert_successful_increase_boost(2, 550, 550, 3);
-		assert_successful_increase_boost(2, 6666, 7216, 36);
-	})
-}
-
 #[test]
 fn impl_deposit_is_successful() {
 	new_test_ext().execute_with(|| {
@@ -466,7 +407,7 @@ fn impl_deposit_is_successful() {
 			1u32,
 		);
 
-		assert_ok!(Capacity::deposit(target_msa_id, 5u32.into(), 1u32.into()));
+		assert_ok!(Capacity::deposit(target_msa_id, 5, 1));
 	});
 }
 
