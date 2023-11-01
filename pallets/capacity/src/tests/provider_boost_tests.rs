@@ -14,7 +14,7 @@ fn provider_boost_extrinsic_works() {
 		let amount = 200;
 		let capacity = 1;
 		register_provider(target, String::from("Foo"));
-		set_era_and_reward_pool_at_block(10, 100, 100, 0);
+		set_era_and_reward_pool_at_block(10,100,0);
 		assert_ok!(Capacity::provider_boost(RuntimeOrigin::signed(account), target, amount));
 
 		// Check that StakingAccountLedger is updated.
@@ -52,7 +52,7 @@ fn assert_successful_increase_stake_and_issue_boost(
 	expected_target_token: u64,
 	expected_capacity: u64,
 ) {
-	set_era_and_reward_pool_at_block(10, 100, 100, 0);
+	set_era_and_reward_pool_at_block(10, 100, 0);
 	let staker = 10_000; // has 10_000 token
 	let mut boost_account = BoostingAccountDetails::<Test>::default();
 
@@ -86,7 +86,7 @@ fn provider_boost_adjusts_reward_pool_total() {
 		let amount = 500;
 		let current_era = 10;
 		register_provider(target, String::from("Foo"));
-		set_era_and_reward_pool_at_block(current_era, 100, 100, 0);
+		set_era_and_reward_pool_at_block(current_era, 100, 0);
 		assert_ok!(Capacity::provider_boost(RuntimeOrigin::signed(account), target, amount));
 
 		let reward_pool_info = Capacity::get_reward_pool_for_era(current_era).unwrap();
@@ -132,7 +132,7 @@ fn reward_pool_boost_and_rollover() {
 		let current_era = 99u32;
 		let current_block = 500u32;
 		let initial_total_staked= 500u64;
-		set_era_and_reward_pool_at_block(current_era, current_era, current_block, initial_total_staked);
+		set_era_and_reward_pool_at_block(current_era, current_block, initial_total_staked);
 
 
 		system_run_to_block(504);
@@ -172,7 +172,7 @@ fn calling_stake_on_provider_boost_target_errors() {
 		let target: MessageSourceId = 1;
 		let amount = 200;
 		register_provider(target, String::from("Bear"));
-		set_era_and_reward_pool_at_block(10, 100, 100, 0);
+		set_era_and_reward_pool_at_block(10, 100, 0);
 
 		assert_ok!(Capacity::provider_boost(RuntimeOrigin::signed(account), target, amount));
 		assert_noop!(
@@ -188,7 +188,7 @@ fn calling_provider_boost_on_staked_target_errors() {
 		let target: MessageSourceId = 1;
 		let amount = 200;
 		register_provider(target, String::from("Foobear"));
-		set_era_and_reward_pool_at_block(10, 100, 100, 0);
+		set_era_and_reward_pool_at_block(10, 100, 0);
 		assert_ok!(Capacity::stake(RuntimeOrigin::signed(account), target, amount));
 		assert_noop!(
 			Capacity::provider_boost(RuntimeOrigin::signed(account), target, 50),

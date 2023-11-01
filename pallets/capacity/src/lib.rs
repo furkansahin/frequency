@@ -267,6 +267,11 @@ pub mod pallet {
 	#[pallet::getter(fn get_retargets_for)]
 	pub type Retargets<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, RetargetInfo<T>>;
 
+	#[pallet::storage]
+	#[pallet::getter(fn get_unstake_unlocking_for)]
+	pub type UnstakeUnlocks<T:Config> =
+		StorageMap<_, Twox64Concat, T::AccountId, BoundedVec<UnlockChunk<BalanceOf<T>, T::EpochNumber>, T::MaxUnlockingChunks>>;
+
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
 
@@ -813,12 +818,16 @@ impl<T: Config> Pallet<T> {
 		current_epoch.saturating_add(thaw_period.into())
 	}
 
-	// TODO: alter for checking provider boost or make another function
+	// Cannot unstake if they don't have an account of either type
+	// Cannot unstake if their unlock chunks list is full; they must wait until the oldest thaw period has ended.
 	fn ensure_can_unstake(unstaker: &T::AccountId) -> Result<(), DispatchError> {
-		let staking_account: StakingAccountDetails<T> =
-			Self::get_staking_account_for(unstaker).ok_or(Error::<T>::NotAStakingAccount)?;
 		ensure!(
-			staking_account.unlocking.len().lt(&(T::MaxUnlockingChunks::get() as usize)),
+			Self::get_staking_account_for(unstaker).is_some() ||
+			Self::get_boost_details_for(unstaker).is_some(),
+			Error::<T>::NotAStakingAccount
+		);
+		ensure!(
+			!Self::get_unstake_unlocking_for(unstaker).unwrap_or_default().is_full(),
 			Error::<T>::MaxUnlockingChunksExceeded
 		);
 		Ok(())

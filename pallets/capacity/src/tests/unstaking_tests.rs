@@ -12,6 +12,7 @@ use sp_core::bounded::BoundedVec;
 fn unstake_happy_path() {
 	new_test_ext().execute_with(|| {
 		// TODO: ProviderBoost after unstake affects reward pool info #1699
+		// TODO: Unstake maximized adds to common unlock chunks
 		let token_account = 200;
 		let target: MessageSourceId = 1;
 		let staking_amount = 100;
@@ -111,9 +112,9 @@ fn unstake_errors_max_unlocking_chunks_exceeded() {
 
 		register_provider(target, String::from("Test Target"));
 
-		assert_ok!(Capacity::stake(RuntimeOrigin::signed(token_account), target, staking_amount,));
+		assert_ok!(Capacity::stake(RuntimeOrigin::signed(token_account), target, staking_amount));
 
-		for _n in 0..<Test as pallet_capacity::Config>::MaxUnlockingChunks::get() {
+		for _n in 0..<Test as Config>::MaxUnlockingChunks::get() {
 			assert_ok!(Capacity::unstake(
 				RuntimeOrigin::signed(token_account),
 				target,
@@ -192,24 +193,49 @@ fn unstake_provider_boosted_target_adjusts_reward_pool_total() {
 	});
 }
 
-// TODO: when resuming reward pool branch
 #[test]
-fn unstake_provider_boosted_target_updates_staking_account_history() {
+fn unstake_provider_boosted_target_updates_boost_account_history() {
 	new_test_ext().execute_with(|| {
-		assert!(false);
+		let initial_block = 10_000;
+		let initial_pool = 4_000;
+		let initial_era = 199;
 	});
 }
 
 #[test]
-fn unstake_when_both_types_of_staking_correctly_updates_lock_values() {
+fn unstake_when_both_types_of_staking_correctly_updates_locked_balance() {
 	new_test_ext().execute_with(|| {
 		assert!(false);
 	})
 }
 
 #[test]
-fn unstake_provider_boosted_target_adds_to_common_unlock_chunks() {
-	new_test_ext().execute_with(|| {
-		assert!(false);
-	})
+fn unstake_both_types_fills_up_common_unlock() {
+	new_test_ext().execute_with((|| {
+		let initial_block = 20_000;
+		let initial_pool = 4_000;
+		let initial_era = 199;
+		let staker = 10_000;
+
+		set_era_and_reward_pool_at_block(initial_era, initial_block, initial_pool);
+
+		let target1 = 1;
+		let target2 = 2;
+		register_provider(target1, String::from("Test Target"));
+		register_provider(target2, String::from("Test Target"));
+
+		assert_ok!(Capacity::stake(RuntimeOrigin::signed(staker), target1, 1_000));
+		assert_ok!(Capacity::provider_boost(RuntimeOrigin::signed(staker), target2, 2_000));
+
+		// max unlock chunks in mock is 4
+		for _i in 0..2 {
+			assert_ok!(Capacity::unstake(RuntimeOrigin::signed(staker), target1, 50));
+			assert_ok!(Capacity::unstake(RuntimeOrigin::signed(staker), target2, 50));
+		}
+		assert_noop!(
+			Capacity::unstake(RuntimeOrigin::signed(staker), target1, 50),
+			Error::<Test>::MaxUnlockingChunksExceeded
+		);
+	}))
 }
+

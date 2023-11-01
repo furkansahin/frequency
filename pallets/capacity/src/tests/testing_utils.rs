@@ -93,7 +93,7 @@ pub fn setup_provider(
 
 pub fn assert_capacity_and_target_details(
 	target: &MessageSourceId,
-	expected_target_token: u64,
+	expected_target_amount: u64,
 	expected_capacity: u64,
 	staker: &u64,
 ) {
@@ -105,17 +105,17 @@ pub fn assert_capacity_and_target_details(
 
 	let target_details = Capacity::get_target_for(&staker, &target).unwrap();
 
-	assert_eq!(target_details.amount, expected_target_token);
+	assert_eq!(target_details.amount, expected_target_amount);
 	assert_eq!(target_details.capacity, expected_capacity);
 }
 
-pub fn set_era_and_reward_pool_at_block(current_era: u32, era_start: u32, current_block: u32, amount: u64) {
-	let initial_rpi: RewardPoolInfo<BalanceOf<Test>> = RewardPoolInfo {
+pub fn set_era_and_reward_pool_at_block(era: u32, block: u32, amount: u64) {
+	let rpi: RewardPoolInfo<BalanceOf<Test>> = RewardPoolInfo {
 		total_staked_token: amount,
 		total_reward_pool: 0,
 		unclaimed_balance: 0,
 	};
-	StakingRewardPool::<Test>::insert(current_era, initial_rpi);
-	CurrentEraInfo::<Test>::set(RewardEraInfo { era_index: current_era, started_at: era_start });
-	System::set_block_number(current_block);
+	StakingRewardPool::<Test>::insert(era, rpi);
+	CurrentEraInfo::<Test>::set(RewardEraInfo { era_index: era, started_at: block });
+	System::set_block_number(block);
 }
