@@ -2,11 +2,11 @@
 name: Verify PR Commit
 concurrency:
   group: ${{github.workflow}}-${{github.ref}}
-  cancel-in-progress: true
 on:
   pull_request:
     branches:
       - main
+      - ubicloud
       - "*-development" # Feature Branches should suffix with -development
 env:
   BIN_DIR: target/release
