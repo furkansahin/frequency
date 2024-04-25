@@ -297,12 +297,11 @@ jobs:
     if: needs.changes.outputs.rust == 'true'
     name: Verify Build Runtime for ${{matrix.network}}
     strategy:
-      fail-fast: true
       matrix:
         # Remember, runtimes are separate for each relay chain
         # We do not release frequency-*-local runtimes however
         # Also should match `verify-build-runtimes-dummy`
-        network: [dev, rococo, paseo, mainnet]
+        network: [dev, rococo, paseo, mainnet, dev, rococo, paseo, mainnet, dev, rococo, paseo, mainnet, dev, rococo, paseo, mainnet]
         include:
           - network: dev
             build-profile: release
