@@ -3,9 +3,9 @@
 set -e
 
 cmd=$1
-chain_spec="${RAW_PARACHAIN_CHAIN_SPEC:-./res/genesis/local/rococo-local-frequency-2000-raw.json}"
+chain_spec="${RAW_PARACHAIN_CHAIN_SPEC:-./res/genesis/local/paseo-local-frequency-2000-raw.json}"
 # The runtime we want to use
-parachain="${PARA_CHAIN_CONFIG:-rococo-2000}"
+parachain="${PARA_CHAIN_CONFIG:-paseo-2000}"
 # The parachain Id we want to use
 para_id="${PARA_ID:-2000}"
 # The tmp base directory
@@ -13,7 +13,7 @@ base_dir=/tmp/frequency
 # Option to use the Docker image to export state & wasm
 docker_onboard="${DOCKER_ONBOARD:-false}"
 frequency_docker_image_tag="${PARA_DOCKER_IMAGE_TAG:-frequency-latest}"
-chain="${RELAY_CHAIN_SPEC:-./resources/rococo-local.json}"
+chain="${RELAY_CHAIN_SPEC:-./resources/paseo-local.json}"
 # offchain options
 offchain_params="--offchain-worker=never"
 
@@ -30,8 +30,20 @@ start-relay-chain)
   docker-compose up -d relay_alice relay_bob
   ;;
 
+start-paseo-relay-chain)
+  echo "Starting local relay chain with Alice and Bob..."
+  cd docker
+  docker-compose up -d relay_paseo_alice relay_paseo_bob
+  ;;
+
 stop-relay-chain)
   echo "Stopping relay chain..."
+  cd docker
+  docker-compose down
+  ;;
+
+stop-paseo-relay-chain)
+  echo "Stopping paseo chain..."
   cd docker
   docker-compose down
   ;;
@@ -50,7 +62,7 @@ stop-frequency-docker)
 
 start-frequency)
   printf "\nBuilding frequency with runtime '$parachain' and id '$para_id'...\n"
-  cargo build --features frequency-rococo-local
+  cargo build --features frequency-local
 
   parachain_dir=$base_dir/parachain/${para_id}
   mkdir -p $parachain_dir;
@@ -61,7 +73,7 @@ start-frequency)
   fi
 
   ./scripts/run_collator.sh \
-    --chain="frequency-rococo-local" --alice \
+    --chain="frequency-paseo-local" --alice \
     --base-path=$parachain_dir/data \
     --wasm-execution=compiled \
     --force-authoring \
@@ -182,7 +194,7 @@ start-frequency-container)
   frequency_rpc_port="${Frequency_RPC_PORT:-$frequency_default_rpc_port}"
 
   ./scripts/run_collator.sh \
-    --chain="frequency-rococo-local" --alice \
+    --chain="frequency-paseo-local" --alice \
     --base-path=$parachain_dir/data \
     --wasm-execution=compiled \
     --force-authoring \
@@ -195,14 +207,14 @@ start-frequency-container)
    $offchain_params \
   ;;
 
-register-frequency-rococo-local)
+register-frequency-paseo-local)
   echo "reserving and registering parachain with relay via first available slot..."
 
   cd scripts/js/onboard
   yarn && yarn register "ws://0.0.0.0:9946" "//Alice"
   ;;
 
-onboard-frequency-rococo-local)
+onboard-frequency-paseo-local)
   echo "Onboarding parachain with runtime '$parachain' and id '$para_id'..."
 
    onboard_dir="$base_dir/onboard"
@@ -210,11 +222,11 @@ onboard-frequency-rococo-local)
 
    wasm_location="$onboard_dir/${parachain}-${para_id}.wasm"
     if [ "$docker_onboard" == "true" ]; then
-      genesis=$(docker run -it {REPO_NAME}/frequency:${frequency_docker_image_tag} export-genesis-state --chain="frequency-rococo-local")
-      docker run -it {REPO_NAME}/frequency:${frequency_docker_image_tag} export-genesis-wasm --chain="frequency-rococo-local" > $wasm_location
+      genesis=$(docker run -it {REPO_NAME}/frequency:${frequency_docker_image_tag} export-genesis-state --chain="frequency-paseo-local")
+      docker run -it {REPO_NAME}/frequency:${frequency_docker_image_tag} export-genesis-wasm --chain="frequency-paseo-local" > $wasm_location
     else
-      genesis=$(./target/debug/frequency export-genesis-state --chain="frequency-rococo-local")
-      ./target/debug/frequency export-genesis-wasm --chain="frequency-rococo-local" > $wasm_location
+      genesis=$(./target/debug/frequency export-genesis-state --chain="frequency-paseo-local")
+      ./target/debug/frequency export-genesis-wasm --chain="frequency-paseo-local" > $wasm_location
     fi
 
   echo "WASM path:" "${wasm_location}"
@@ -223,14 +235,14 @@ onboard-frequency-rococo-local)
   yarn && yarn onboard "ws://0.0.0.0:9946" "//Alice" ${para_id} "${genesis}" $wasm_location
   ;;
 
-offboard-frequency-rococo-local)
+offboard-frequency-paseo-local)
   echo "cleaning up parachain for id '$para_id'..."
 
   cd scripts/js/onboard
   yarn && yarn cleanup "ws://0.0.0.0:9946" "//Alice" ${para_id}
   ;;
 
-upgrade-frequency-rococo-local)
+upgrade-frequency-paseo-local)
 
   root_dir=$(git rev-parse --show-toplevel)
   echo "root_dir is set to $root_dir"
@@ -238,7 +250,7 @@ upgrade-frequency-rococo-local)
   # Due to defaults and profile=debug, the target directory will be $root_dir/target/debug
   cargo build \
     --package frequency-runtime \
-    --features frequency-rococo-local
+    --features frequency-local
 
   wasm_location=$root_dir/target/debug/wbuild/frequency-runtime/frequency_runtime.compact.compressed.wasm
 

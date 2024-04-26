@@ -14,36 +14,20 @@ pub type ChainSpec =
 
 use super::{get_account_id_from_seed, get_collator_keys_from_seed, get_properties, Extensions};
 
-#[allow(clippy::unwrap_used)]
-/// Generates the Live Frequency Rococo chain spec from the raw json
-pub fn load_frequency_rococo_spec() -> ChainSpec {
-	ChainSpec::from_json_bytes(
-		&include_bytes!("../../../../resources/frequency-rococo.raw.json")[..],
-	)
-	.unwrap()
-}
-
-/// Generate the session keys from individual elements.
-///
-/// The input must be a tuple of individual keys (a single arg for now since we have just one key).
-fn template_session_keys(keys: AuraId) -> frequency_runtime::SessionKeys {
-	frequency_runtime::SessionKeys { aura: keys }
-}
-
-/// Generates the chain spec for a local testnet
-pub fn local_rococo_testnet_config() -> ChainSpec {
+/// Generates the chain spec for a development (no relay)
+pub fn development_config() -> ChainSpec {
 	// Give your base currency a unit name and decimal places
 	let properties =
 		get_properties(FREQUENCY_LOCAL_TOKEN, TOKEN_DECIMALS as u32, Ss58Prefix::get().into());
 
 	ChainSpec::from_genesis(
 		// Name
-		"Frequency Local Testnet",
+		"Frequency Development (No Relay)",
 		// ID
-		"frequency-rococo-local",
-		ChainType::Local,
+		"dev",
+		ChainType::Development,
 		move || {
-			testnet_genesis(
+			development_genesis(
 				// initial collators.
 				vec![
 					(
@@ -85,7 +69,7 @@ pub fn local_rococo_testnet_config() -> ChainSpec {
 					get_account_id_from_seed::<sr25519::Public>("Dave"),
 				],
 				// ParaId
-				2000.into(),
+				1000.into(),
 			)
 		},
 		// Bootnodes
@@ -93,21 +77,28 @@ pub fn local_rococo_testnet_config() -> ChainSpec {
 		// Telemetry
 		None,
 		// Protocol ID
-		Some("frequency-rococo-local"),
+		Some("dev"),
 		// Fork ID
 		None,
 		// Properties
 		Some(properties),
 		// Extensions
 		Extensions {
-			relay_chain: "rococo-local".into(), // You MUST set this to the correct network!
-			para_id: 2000,
+			relay_chain: "dev".into(), // You MUST set this to the correct network!
+			para_id: 1000,
 		},
 	)
 }
 
+/// Generate the session keys from individual elements.
+///
+/// The input must be a tuple of individual keys (a single arg for now since we have just one key).
+fn template_session_keys(keys: AuraId) -> frequency_runtime::SessionKeys {
+	frequency_runtime::SessionKeys { aura: keys }
+}
+
 #[allow(clippy::expect_used)]
-fn testnet_genesis(
+fn development_genesis(
 	invulnerables: Vec<(AccountId, AuraId)>,
 	root_key: Option<AccountId>,
 	endowed_accounts: Vec<AccountId>,

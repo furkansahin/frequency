@@ -14,6 +14,9 @@ start:
 start-relay:
 	./scripts/init.sh start-relay-chain
 
+start-paseo-relay:
+	./scripts/init.sh start-paseo-relay-chain
+
 start-frequency:
 	./scripts/init.sh start-frequency
 
@@ -45,6 +48,9 @@ start-interval-with-offchain:
 stop-relay:
 	./scripts/init.sh stop-relay-chain
 
+stop-paseo-relay:
+	./scripts/init.sh stop-paseo-relay-chain
+
 stop-frequency-docker:
 	./scripts/init.sh stop-frequency-docker
 
@@ -59,32 +65,32 @@ local-block:
 
 .PHONY: register
 register:
-	./scripts/init.sh register-frequency-rococo-local
+	./scripts/init.sh register-frequency-paseo-local
 
 .PHONY: onboard
 onboard:
-	./scripts/init.sh onboard-frequency-rococo-local
+	./scripts/init.sh onboard-frequency-paseo-local
 
 .PHONY: offboard
 offboard:
-	./scripts/init.sh offboard-frequency-rococo-local
+	./scripts/init.sh offboard-frequency-paseo-local
 
-.PHONY: specs-rococo-2000, specs-rococo-local
-specs-rococo-2000:
-	./scripts/generate_specs.sh 2000 rococo-2000 release
+.PHONY: specs-paseo-2000, specs-paseo-local
+specs-paseo-2000:
+	./scripts/generate_specs.sh 2000 paseo-2000 release
 
 specs-rococo-local:
 	./scripts/generate_relay_specs.sh
 
 .PHONY: format
 format:
-	cargo +nightly-2023-07-13 fmt
+	cargo +nightly-2024-03-01 fmt
 
 .PHONY: lint, lint-audit
 lint:
-	cargo +nightly-2023-07-13 fmt --check
-	SKIP_WASM_BUILD=1 env -u RUSTFLAGS cargo +nightly-2023-07-13 clippy --features runtime-benchmarks,frequency-lint-check -- -D warnings
-	RUSTDOCFLAGS="--enable-index-page --check -Zunstable-options" cargo +nightly-2023-07-13 doc --no-deps --features frequency
+	cargo +nightly-2024-03-01 fmt --check
+	SKIP_WASM_BUILD=1 env -u RUSTFLAGS cargo clippy --features runtime-benchmarks,frequency-lint-check -- -D warnings
+	RUSTC_BOOTSTRAP=1 RUSTDOCFLAGS="--enable-index-page --check -Zunstable-options" cargo doc --no-deps --features frequency
 
 lint-audit:
 	cargo deny check -c deny.toml
@@ -207,7 +213,7 @@ check-local:
 	SKIP_WASM_BUILD= cargo check --features frequency-rococo-local
 
 check-rococo:
-	SKIP_WASM_BUILD= cargo check --features frequency-rococo-testnet
+	SKIP_WASM_BUILD= cargo check --features frequency-testnet
 
 check-mainnet:
 	SKIP_WASM_BUILD= cargo check --features frequency
@@ -227,21 +233,21 @@ build-no-relay:
 	cargo build --features frequency-no-relay
 
 build-local:
-	cargo build --features frequency-rococo-local
+	cargo build --features frequency-local
 
-build-rococo:
-	cargo build --features frequency-rococo-testnet
+build-testnet:
+	cargo build --features frequency-testnet
 
 build-mainnet:
 	cargo build --features frequency
 
-build-rococo-release:
-	cargo build --locked --features frequency-rococo-testnet --release
+build-testnet-release:
+	cargo build --locked --features frequency-testnet --release
 
 build-mainnet-release:
 	cargo build --locked --features  frequency --release
 
-.PHONY: test, e2e-tests, e2e-tests-serial, e2e-tests-only, e2e-tests-load, e2e-tests-load-only, e2e-tests-rococo, e2e-tests-rococo-local
+.PHONY: test, e2e-tests, e2e-tests-serial, e2e-tests-only, e2e-tests-load, e2e-tests-load-only, e2e-tests-rococo, e2e-tests-rococo-local, e2e-tests-testnet-paseo, e2e-tests-paseo-local
 test:
 	cargo test --workspace --features runtime-benchmarks,frequency-lint-check
 
@@ -266,25 +272,42 @@ e2e-tests-rococo:
 e2e-tests-rococo-local:
 	./scripts/run_e2e_tests.sh -c rococo_local
 
-.PHONY: try-runtime-create-snapshot-rococo, try-runtime-create-snapshot-mainnet, try-runtime-upgrade-rococo, try-runtime-upgrade-mainnet, try-runtime-use-snapshot-rococo, try-runtime-use-snapshot-mainnet
+e2e-tests-testnet-paseo:
+	./scripts/run_e2e_tests.sh -c paseo_testnet
+
+e2e-tests-paseo-local:
+	./scripts/run_e2e_tests.sh -c paseo_local
+
+.PHONY: try-runtime-create-snapshot-rococo, try-runtime-create-snapshot-mainnet, try-runtime-upgrade-rococo, try-runtime-upgrade-mainnet, try-runtime-use-snapshot-rococo, try-runtime-use-snapshot-mainnet, try-runtime-create-snapshot-paseo-testnet, try-runtime-use-snapshot-paseo-testnet, try-runtime-upgrade-paseo-testnet
 try-runtime-create-snapshot-rococo:
 	try-runtime create-snapshot --uri wss://rpc.rococo.frequency.xyz:443 rococo-all-pallets.state
+
+try-runtime-create-snapshot-paseo-testnet:
+	try-runtime create-snapshot --uri wss://0.rpc.testnet.amplica.io:443 testnet-paseo-all-pallets.state
 
 # mainnet snapshot takes as many as 24 hours to complete
 try-runtime-create-snapshot-mainnet:
 	try-runtime create-snapshot --uri wss://1.rpc.frequency.xyz:443 mainnet-all-pallets.state
 
 try-runtime-upgrade-rococo:
-	cargo build --release --features frequency-rococo-testnet,try-runtime && \
+	cargo build --release --features frequency-testnet,try-runtime && \
 	try-runtime --runtime ./target/release/wbuild/frequency-runtime/frequency_runtime.wasm on-runtime-upgrade live --uri wss://rpc.rococo.frequency.xyz:443
+
+try-runtime-upgrade-paseo-testnet:
+	cargo build --release --features frequency-testnet,try-runtime && \
+	try-runtime --runtime ./target/release/wbuild/frequency-runtime/frequency_runtime.wasm on-runtime-upgrade live --uri wss://0.rpc.testnet.amplica.io:443
 
 try-runtime-upgrade-mainnet:
 	cargo build --release --features frequency,try-runtime && \
 	try-runtime --runtime ./target/release/wbuild/frequency-runtime/frequency_runtime.wasm on-runtime-upgrade live --uri wss://1.rpc.frequency.xyz:443
 
 try-runtime-use-snapshot-rococo:
-	cargo build --release --features frequency-rococo-testnet,try-runtime && \
+	cargo build --release --features frequency-testnet,try-runtime && \
 	try-runtime --runtime ./target/release/wbuild/frequency-runtime/frequency_runtime.wasm on-runtime-upgrade snap --path rococo-all-pallets.state
+
+try-runtime-use-snapshot-paseo-testnet:
+	cargo build --release --features frequency-testnet,try-runtime && \
+	try-runtime --runtime ./target/release/wbuild/frequency-runtime/frequency_runtime.wasm on-runtime-upgrade snap --path testnet-paseo-all-pallets.state
 
 try-runtime-use-snapshot-mainnet:
 	cargo build --release --features frequency,try-runtime && \

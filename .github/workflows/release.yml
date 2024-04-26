@@ -1,8 +1,9 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
 name: Release
 run-name: Cut Release ${{github.event.inputs.release-version || github.ref_name}}
 concurrency:
   group: ${{github.workflow}}-${{github.ref}}
-  cancel-in-progress: true
+  cancel-in-progress: false
 on:
   push:
     tags:
@@ -22,7 +23,7 @@ env:
   RELEASE_BRANCH_NAME: release-${{github.event.inputs.release-version || github.ref_name}}
   LATEST_FULL_RELEASE_TAG: _LATEST-FULL-RELEASE
   TEST_RUN: ${{startsWith(github.event.inputs.release-version || github.ref_name, 'v0.0.1')}}
-  RUST_TOOLCHAIN: "1.70.0" # Match to /rust-toolchain.toml
+  RUST_TOOLCHAIN: "1.76.0" # Match to /rust-toolchain.toml
 
 jobs:
   validate-release-version:
@@ -36,7 +37,7 @@ jobs:
         run: |
           version=${{env.NEW_RELEASE_TAG_FROM_UI}}
           echo "Release version entered in UI: $version"
-          regex='^v([0-9]+)\.(0|([1-9][0-9]+))\.(0|([1-9][0-9]+))(-rc[1-9][0-9]*)?$'
+          regex='^v([0-9]+)\.(0|([1-9][0-9]*))\.(0|([1-9][0-9]*))(-rc[1-9][0-9]*)?$'
           if [[ ! $version =~ $regex ]]; then
             echo "ERROR: Entered version $version is not valid."
             echo "Please use v#.#.#[-rc#] format."
@@ -153,31 +154,25 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        # os: [[self-hosted, Linux, X64, build, v2], [self-hosted, Linux, ARM64,  build, v2]]
-        os: [[self-hosted, Linux, X64, build, v2]]
-        network: [dev, local, rococo, mainnet]
+        network: [dev, local, testnet, mainnet]
         include:
           - network: dev
             spec: frequency-no-relay
             build-profile: release
             release-file-name-prefix: frequency-dev
           - network: local
-            spec: frequency-rococo-local
+            spec: frequency-local
             build-profile: release
-            release-file-name-prefix: frequency-rococo-local
-          - network: rococo
-            spec: frequency-rococo-testnet
+            release-file-name-prefix: frequency-local
+          - network: testnet
+            spec: frequency-testnet
             build-profile: release
-            release-file-name-prefix: frequency-rococo
+            release-file-name-prefix: frequency-testnet
           - network: mainnet
             spec: frequency
             build-profile: release
             release-file-name-prefix: frequency
-          - os: [self-hosted, Linux, X64, build, v2]
-            arch: amd64
-          # - os: [self-hosted, Linux, ARM64]
-          #   arch: arm64
-    runs-on: ${{matrix.os}}
+    runs-on: ubicloud-standard-8
     container: ghcr.io/libertydsnp/frequency/ci-base-image:latest
     env:
       SIGNING_SUBKEY_FINGERPRINT: B6327D1474C6392032870E8EFA4FD1E73A0FE707
@@ -233,9 +228,9 @@ jobs:
         working-directory: ${{env.BIN_DIR}}
         run: gpg --verify ${{env.RELEASE_BIN_FILENAME}}.asc
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          name: artifacts-binary-${{matrix.network}}-${{github.run_id}}
           path: |
             ${{env.BIN_DIR}}/${{env.RELEASE_BIN_FILENAME}}
             ${{env.BIN_DIR}}/${{env.RELEASE_BIN_FILENAME}}.sha256
@@ -252,13 +247,16 @@ jobs:
     outputs:
       runtime_filename_dev: ${{steps.set-env-vars.outputs.runtime_filename_dev}}
       runtime_filename_rococo: ${{steps.set-env-vars.outputs.runtime_filename_rococo}}
+      runtime_filename_paseo: ${{steps.set-env-vars.outputs.runtime_filename_paseo}}
       runtime_filename_mainnet: ${{steps.set-env-vars.outputs.runtime_filename_mainnet}}
     # env:
     #   HOME: /root
     strategy:
       fail-fast: true
       matrix:
-        network: [dev, rococo, mainnet]
+        # Remember, runtimes are separate for each relay chain
+        # We do not release frequency-*-local runtimes however
+        network: [dev, rococo, paseo, mainnet]
         include:
           - network: dev
             build-profile: release
@@ -267,15 +265,23 @@ jobs:
             built-wasm-file-name-prefix: frequency_runtime
             release-wasm-file-name-prefix: frequency-dev_runtime
             features: frequency-no-relay
-            wasm-core-version: frequency-rococo
+            wasm-core-version: frequency-testnet
           - network: rococo
             build-profile: release
             package: frequency-runtime
             runtime-dir: runtime/frequency
             built-wasm-file-name-prefix: frequency_runtime
             release-wasm-file-name-prefix: frequency-rococo_runtime
-            features: frequency-rococo-testnet
-            wasm-core-version: frequency-rococo
+            features: frequency-testnet
+            wasm-core-version: frequency-testnet
+          - network: paseo
+            build-profile: release
+            package: frequency-runtime
+            runtime-dir: runtime/frequency
+            built-wasm-file-name-prefix: frequency_runtime
+            release-wasm-file-name-prefix: frequency-paseo_runtime
+            features: frequency-testnet
+            wasm-core-version: frequency-testnet
           - network: mainnet
             build-profile: release
             package: frequency-runtime
@@ -284,12 +290,8 @@ jobs:
             release-wasm-file-name-prefix: frequency_runtime
             features: frequency
             wasm-core-version: frequency
-    runs-on: [self-hosted, Linux, X64, build, v2]
+    runs-on: ubicloud-standard-8
     steps:
-      - name: Install Required Packages
-        run: |
-          sudo apt-get update
-          sudo apt install -y wget file build-essential
       - name: Check Out Repo
         uses: actions/checkout@v4
         with:
@@ -323,10 +325,11 @@ jobs:
           srtool --version
       - name: Build Deterministic WASM
         run: |
-          RUST_LOG=debug SRTOOL_TAG="1.70.0" srtool build \
+          RUST_LOG=debug SRTOOL_TAG="1.77.0" srtool build --image \
             --build-opts="'--features on-chain-release-build,no-metadata-docs,${{matrix.features}}'" \
             --profile=${{matrix.build-profile}} \
-            --package=${{matrix.package}}
+            --package=${{matrix.package}} \
+            --root
       - name: Rename WASM file
         run: |
           cp -p ./${{env.WASM_DIR}}/${{env.BUILT_WASM_FILENAME}} \
@@ -341,16 +344,16 @@ jobs:
           subwasm info ${{env.WASM_DIR}}/${{env.RELEASE_WASM_FILENAME}} | grep "Core version:.*${{matrix.wasm-core-version}}-${{env.RUNTIME_SPEC_VERSION}}" || \
             (echo "ERROR: WASM Core version didn't match ${{matrix.wasm-core-version}}-${{env.RUNTIME_SPEC_VERSION}}" && exit 1)
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          name: artifacts-wasm-${{matrix.network}}-${{github.run_id}}
           path: ${{env.WASM_DIR}}/${{env.RELEASE_WASM_FILENAME}}
           if-no-files-found: error
 
   build-rust-developer-docs:
     needs: version-code
     name: Build Rust Developer Docs
-    runs-on: [self-hosted, Linux, X64, build, v2]
+    runs-on: ubicloud-standard-4
     container: ghcr.io/libertydsnp/frequency/ci-base-image:latest
     steps:
       - name: Check Out Repo
@@ -358,11 +361,11 @@ jobs:
         with:
           ref: ${{env.RELEASE_BRANCH_NAME}}
       - name: Setup Pages
-        uses: actions/configure-pages@v4
+        uses: actions/configure-pages@v5
       - name: Build Docs
         run: |
-          rustup target add wasm32-unknown-unknown --toolchain nightly-2023-07-13
-          RUSTDOCFLAGS="--enable-index-page -Zunstable-options" cargo +nightly-2023-07-13 doc --no-deps --workspace --features frequency
+          rustup target add wasm32-unknown-unknown --toolchain nightly-2024-03-01
+          RUSTDOCFLAGS="--enable-index-page -Zunstable-options" cargo +nightly-2024-03-01 doc --no-deps --workspace --features frequency
       - name: Fix file permissions
         shell: sh
         run: |
@@ -380,10 +383,9 @@ jobs:
     name: Build JS API Augment
     env:
       NETWORK: local
-      CHAIN_SPEC: frequency-rococo-local
       BUILD_PROFILE: release
       BIN_DIR: target/release
-      RELEASE_FILENAME_PREFIX: frequency-rococo-local
+      RELEASE_FILENAME_PREFIX: frequency-local
       ARCH: amd64
     runs-on: ubuntu-22.04
     container: ghcr.io/libertydsnp/frequency/ci-base-image:latest
@@ -399,7 +401,7 @@ jobs:
       - name: Set up NodeJs
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: "npm"
           registry-url: "https://registry.npmjs.org"
           cache-dependency-path: js/api-augment/package-lock.json
@@ -408,13 +410,14 @@ jobs:
         working-directory: js/api-augment
       - name: Download Binaries
         id: download-binaries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          pattern: artifacts-binary-${{env.NETWORK}}-${{github.run_id}}
           path: .
-      - name: List Downloaded Binaries
+      - name: Extract and List Downloaded Binaries
         run: |
           download_dir=${{steps.download-binaries.outputs.download-path}}
+          mv "${download_dir}"/artifacts*/* "${download_dir}"
           echo "Download dir: $download_dir"
           echo "Downloaded binaries: $(ls -l $download_dir)"
       - name: Move Binary to Target Dir
@@ -423,12 +426,12 @@ jobs:
           mv ${{env.RELEASE_BIN_FILENAME}} ${{env.BIN_DIR}}
           chmod 755 ${{env.BIN_DIR}}/${{env.RELEASE_BIN_FILENAME}}
       - name: Output Metadata
-        run: ${{env.BIN_DIR}}/${{env.RELEASE_BIN_FILENAME}} export-metadata --chain=frequency-rococo-local --tmp ./js/api-augment/metadata.json
+        run: ${{env.BIN_DIR}}/${{env.RELEASE_BIN_FILENAME}} export-metadata --chain=frequency-paseo-local --tmp ./js/api-augment/metadata.json
       - name: Build
         run: npm run build
         working-directory: js/api-augment
       - name: Upload Dist Dir
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: js-api-augment-${{github.run_id}}
           path: js/api-augment/dist
@@ -464,13 +467,14 @@ jobs:
           fetch-depth: 0
       - name: Download Binaries
         id: download-binaries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          pattern: artifacts-binary-${{matrix.network}}-${{github.run_id}}
           path: .
-      - name: List Downloaded Binaries
+      - name: Extract and List Downloaded Binaries
         run: |
           download_dir=${{steps.download-binaries.outputs.download-path}}
+          mv "${download_dir}"/artifacts*/* "${download_dir}"
           echo "Download dir: $download_dir"
           echo "Downloaded binaries: $(ls -l $download_dir)"
       - name: Move Binary to Target Dir
@@ -497,6 +501,7 @@ jobs:
     name: Compare Metadata
     runs-on: ubuntu-22.04
     env:
+      NETWORK: mainnet
       BIN_DIR: target/release
       BIN_FILENAME: frequency.amd64
       TEST_BIN_FILENAME: frequency.amd64
@@ -508,7 +513,6 @@ jobs:
     steps:
       - name: Set Env Vars
         run: |
-          export NETWORK=mainnet; echo "NETWORK=$NETWORK" >> $GITHUB_ENV
           echo "OUTPUT_FILENAME=metadata-compare-$NETWORK.txt" >> $GITHUB_ENV
       - name: Check Out Repo
         uses: actions/checkout@v4
@@ -521,18 +525,23 @@ jobs:
         with:
           full-release-version-tag: ${{env.LATEST_FULL_RELEASE_TAG}}
       - name: Fetch Reference Binary
-        uses: robinraju/release-downloader@368754b9c6f47c345fcfbf42bcb577c2f0f5f395
+        uses: robinraju/release-downloader@c39a3b234af58f0cf85888573d361fb6fa281534
         with:
           tag: ${{steps.get-previous-full-release-version.outputs.version}}
           fileName: ${{env.BIN_FILENAME}}
           out-file-path: ${{env.REF_DOWNLOAD_DIR}}
       - name: Download Test Binary
-        uses: actions/download-artifact@v3
+        id: download-binaries
+        uses: actions/download-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          pattern: artifacts-binary-${{env.NETWORK}}-${{github.run_id}}
           path: ${{env.TEST_DOWNLOAD_DIR}}
       - name: Rename and Move Binaries
         run: |
+          download_dir=${{steps.download-binaries.outputs.download-path}}
+          mv "${download_dir}"/artifacts*/* "${download_dir}"
+          echo "Download dir: $download_dir"
+          echo "Downloaded binaries: $(ls -l $download_dir)"
           mkdir -p ${{env.BIN_DIR}}
           mv ${{env.REF_DOWNLOAD_DIR}}/${{env.BIN_FILENAME}} ${{env.BIN_DIR}}/${{env.REF_BIN_FILENAME}}
           mv ${{env.TEST_DOWNLOAD_DIR}}/${{env.BIN_FILENAME}} ${{env.BIN_DIR}}/${{env.TEST_BIN_FILENAME}}
@@ -607,9 +616,9 @@ jobs:
         run: |
           cat ${{env.OUTPUT_FILENAME}}
       - name: Upload Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          name: artifacts-metadata-${{github.run_id}}
           path: ${{env.OUTPUT_DIR}}/${{env.OUTPUT_FILENAME}}
           if-no-files-found: error
       - name: Stop Local Nodes
@@ -634,8 +643,9 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       runtime_filename_dev: ${{needs.build-runtimes.outputs.runtime_filename_dev}}
-      runtime_filename_rococo: ${{needs.build-runtimes.outputs.runtime_filename_rococo}}
       runtime_filename_mainnet: ${{needs.build-runtimes.outputs.runtime_filename_mainnet}}
+      runtime_filename_paseo: ${{needs.build-runtimes.outputs.runtime_filename_paseo}}
+      runtime_filename_rococo: ${{needs.build-runtimes.outputs.runtime_filename_rococo}}
     steps:
       - name: Proceed Forward
         run: echo "All build jobs have finished, proceeding with the release"
@@ -713,10 +723,11 @@ jobs:
         run: echo "version=$(make version-polkadot)" >> $GITHUB_OUTPUT
       - name: Download Artifacts
         id: download
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          pattern: artifacts-*-${{github.run_id}}
           path: /tmp
+          merge-multiple: true
       - name: List Downloaded Artifacts
         working-directory: /tmp
         run: |
@@ -733,6 +744,9 @@ jobs:
           runtime_filename_rococo=${{needs.wait-for-all-builds.outputs.runtime_filename_rococo}}
           runtime_info_rococo=$(subwasm info $runtime_filename_rococo | sed -Ez '$ s/\n+$//' | tr '\n' '|')
           echo "runtime_info_rococo=$runtime_info_rococo" >> $GITHUB_OUTPUT
+          runtime_filename_paseo=${{needs.wait-for-all-builds.outputs.runtime_filename_paseo}}
+          runtime_info_paseo=$(subwasm info $runtime_filename_paseo | sed -Ez '$ s/\n+$//' | tr '\n' '|')
+          echo "runtime_info_paseo=$runtime_info_paseo" >> $GITHUB_OUTPUT
           runtime_filename_mainnet=${{needs.wait-for-all-builds.outputs.runtime_filename_mainnet}}
           runtime_info_mainnet=$(subwasm info $runtime_filename_mainnet | sed -Ez '$ s/\n+$//' | tr '\n' '|')
           echo "runtime_info_mainnet=$runtime_info_mainnet" >> $GITHUB_OUTPUT
@@ -740,17 +754,19 @@ jobs:
         working-directory: tools/ci/release-notes
         env:
           CHANGELOG: ${{steps.sanitize-changelog.outputs.sanitized}}
-          RUNTIME_INFO_TESTNET: ${{steps.get-runtimes-info.outputs.runtime_info_rococo}}
+          RUNTIME_INFO_PASEO: ${{steps.get-runtimes-info.outputs.runtime_info_paseo}}
+          RUNTIME_INFO_ROCOCO: ${{steps.get-runtimes-info.outputs.runtime_info_rococo}}
           RUNTIME_INFO_MAINNET: ${{steps.get-runtimes-info.outputs.runtime_info_mainnet}}
         run: |
           ./build-release-notes.sh '${{steps.polkadot-version.outputs.version}}' \
             "${CHANGELOG}" \
-            "${RUNTIME_INFO_TESTNET}" \
             "${RUNTIME_INFO_MAINNET}" \
+            "${RUNTIME_INFO_PASEO}" \
+            "${RUNTIME_INFO_ROCOCO}" \
             > release-notes.md
       - name: Publish Release Candidate on GitHub
         if: steps.is-full-release.outputs.is-full-release != 'true'
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564
         with:
           name: "[Release Candidate] ${{env.NEW_RELEASE_TAG}}"
           prerelease: true
@@ -761,7 +777,7 @@ jobs:
             /tmp/metadata-compare-*
       - name: Publish Full Release on GitHub
         if: steps.is-full-release.outputs.is-full-release == 'true'
-        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
+        uses: softprops/action-gh-release@9d7c94cfd0a1f3ed45544c887983e9fa900f0564
         with:
           body_path: tools/ci/release-notes/release-notes.md
           tag_name: ${{env.NEW_RELEASE_TAG}}
@@ -804,11 +820,11 @@ jobs:
       fail-fast: true
       matrix:
         arch: [amd64]
-        network: [rococo, mainnet]
+        network: [testnet, mainnet]
         include:
-          - network: rococo
+          - network: testnet
             build-profile: release
-            release-file-name-prefix: frequency-rococo
+            release-file-name-prefix: frequency-testnet
           - network: mainnet
             build-profile: release
             release-file-name-prefix: frequency
@@ -836,13 +852,14 @@ jobs:
           version-tag: ${{env.NEW_RELEASE_TAG}}
       - name: Download Binaries
         id: download-binaries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          pattern: artifacts-binary-${{matrix.network}}-${{github.run_id}}
           path: .
-      - name: List Downloaded Binaries
+      - name: Extract and List Downloaded Binaries
         run: |
           download_dir=${{steps.download-binaries.outputs.download-path}}
+          mv "${download_dir}"/artifacts*/* "${download_dir}"
           echo "Download dir: $download_dir"
           echo "Downloaded binaries: $(ls -l $download_dir)"
       - name: Move Binary to Target Dir
@@ -901,7 +918,7 @@ jobs:
           - node: collator-node-local
             network: local
             build-profile: release
-            release-file-name-prefix: frequency-rococo-local
+            release-file-name-prefix: frequency-local
           - node: instant-seal-node
             network: dev
             build-profile: release
@@ -910,9 +927,6 @@ jobs:
             network: dev
             build-profile: release
             release-file-name-prefix: frequency-dev
-          - arch: amd64
-            build-profile: release
-            docker-platform: linux/amd64
     env:
       DOCKER_HUB_PROFILE: frequencychain
     runs-on: ubuntu-22.04
@@ -934,13 +948,14 @@ jobs:
           version-tag: ${{env.NEW_RELEASE_TAG}}
       - name: Download Binaries
         id: download-binaries
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
-          name: artifacts-${{github.run_id}}
+          pattern: artifacts-binary-${{matrix.network}}-${{github.run_id}}
           path: .
-      - name: List Downloaded Binaries
+      - name: Extract and List Downloaded Binaries
         run: |
           download_dir=${{steps.download-binaries.outputs.download-path}}
+          mv "${download_dir}"/artifacts*/* "${download_dir}"
           echo "Download dir: $download_dir"
           echo "Downloaded binaries: $(ls -l $download_dir)"
       - name: Move Binary to Target Dir
@@ -1020,13 +1035,13 @@ jobs:
       - name: Set up NodeJs
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
           cache: "npm"
           registry-url: "https://registry.npmjs.org"
           cache-dependency-path: js/api-augment/package-lock.json
       - name: Download Dist Dir
         id: download
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: js-api-augment-${{github.run_id}}
           path: js/api-augment/dist
@@ -1048,4 +1063,3 @@ jobs:
         working-directory: ./js/api-augment/dist
         env:
           NODE_AUTH_TOKEN: ${{secrets.NODE_AUTH_TOKEN}}
-

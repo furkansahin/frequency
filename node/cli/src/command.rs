@@ -19,6 +19,7 @@ use sc_service::config::{BasePath, PrometheusConfig};
 enum ChainIdentity {
 	Frequency,
 	FrequencyRococo,
+	FrequencyPaseo,
 	FrequencyLocal,
 	FrequencyDev,
 }
@@ -33,7 +34,9 @@ impl IdentifyChain for dyn sc_service::ChainSpec {
 			ChainIdentity::Frequency
 		} else if self.id() == "frequency-rococo" {
 			ChainIdentity::FrequencyRococo
-		} else if self.id() == "frequency-rococo-local" {
+		} else if self.id() == "frequency-paseo" {
+			ChainIdentity::FrequencyPaseo
+		} else if self.id() == "frequency-local" {
 			ChainIdentity::FrequencyLocal
 		} else if self.id() == "dev" {
 			ChainIdentity::FrequencyDev
@@ -48,6 +51,7 @@ impl PartialEq for ChainIdentity {
 		match (self, other) {
 			(ChainIdentity::Frequency, ChainIdentity::Frequency) => true,
 			(ChainIdentity::FrequencyRococo, ChainIdentity::FrequencyRococo) => true,
+			(ChainIdentity::FrequencyPaseo, ChainIdentity::FrequencyPaseo) => true,
 			(ChainIdentity::FrequencyLocal, ChainIdentity::FrequencyLocal) => true,
 			(ChainIdentity::FrequencyDev, ChainIdentity::FrequencyDev) => true,
 			_ => false,
@@ -69,47 +73,55 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
 		"frequency" => return Ok(Box::new(chain_spec::frequency::load_frequency_spec())),
 		#[cfg(feature = "frequency-no-relay")]
 		"dev" | "frequency-no-relay" =>
-			return Ok(Box::new(chain_spec::frequency_rococo::development_config())),
-		#[cfg(feature = "frequency-rococo-local")]
+			return Ok(Box::new(chain_spec::frequency_dev::development_config())),
+		#[cfg(feature = "frequency-local")]
 		"frequency-rococo-local" =>
-			return Ok(Box::new(chain_spec::frequency_rococo::local_testnet_config())),
-		#[cfg(feature = "frequency-rococo-testnet")]
-		"frequency-rococo-testnet" | "frequency-rococo" | "rococo" | "testnet" =>
+			return Ok(Box::new(chain_spec::frequency_rococo::local_rococo_testnet_config())),
+		#[cfg(feature = "frequency-local")]
+		"frequency-paseo-local" =>
+			return Ok(Box::new(chain_spec::frequency_paseo::local_paseo_testnet_config())),
+		#[cfg(feature = "frequency-testnet")]
+		"frequency-testnet" | "frequency-paseo" | "paseo" | "testnet" =>
+			return Ok(Box::new(chain_spec::frequency_paseo::load_frequency_paseo_spec())),
+		#[cfg(feature = "frequency-testnet")]
+		"frequency-rococo" | "rococo" =>
 			return Ok(Box::new(chain_spec::frequency_rococo::load_frequency_rococo_spec())),
 		path => {
 			if path.is_empty() {
 				if cfg!(feature = "frequency") {
 					#[cfg(feature = "frequency")]
 					{
-						return Ok(Box::new(chain_spec::frequency::load_frequency_spec()))
+						return Ok(Box::new(chain_spec::frequency::load_frequency_spec()));
 					}
 					#[cfg(not(feature = "frequency"))]
-					return Err("Frequency runtime is not available.".into())
+					return Err("Frequency runtime is not available.".into());
 				} else if cfg!(feature = "frequency-no-relay") {
 					#[cfg(feature = "frequency-no-relay")]
 					{
-						return Ok(Box::new(chain_spec::frequency_rococo::development_config()))
+						return Ok(Box::new(chain_spec::frequency_dev::development_config()));
 					}
 					#[cfg(not(feature = "frequency-no-relay"))]
-					return Err("Frequency Development (no relay) runtime is not available.".into())
-				} else if cfg!(feature = "frequency-rococo-local") {
-					#[cfg(feature = "frequency-rococo-local")]
-					{
-						return Ok(Box::new(chain_spec::frequency_rococo::local_testnet_config()))
-					}
-					#[cfg(not(feature = "frequency-rococo-local"))]
-					return Err("Frequency Local runtime is not available.".into())
-				} else if cfg!(feature = "frequency-rococo-testnet") {
-					#[cfg(feature = "frequency-rococo-testnet")]
+					return Err("Frequency Development (no relay) runtime is not available.".into());
+				} else if cfg!(feature = "frequency-local") {
+					#[cfg(feature = "frequency-local")]
 					{
 						return Ok(Box::new(
-							chain_spec::frequency_rococo::load_frequency_rococo_spec(),
-						))
+							chain_spec::frequency_paseo::local_paseo_testnet_config(),
+						));
 					}
-					#[cfg(not(feature = "frequency-rococo-testnet"))]
-					return Err("Frequency Rococo runtime is not available.".into())
+					#[cfg(not(feature = "frequency-local"))]
+					return Err("Frequency Local runtime is not available.".into());
+				} else if cfg!(feature = "frequency-testnet") {
+					#[cfg(feature = "frequency-testnet")]
+					{
+						return Ok(Box::new(
+							chain_spec::frequency_paseo::load_frequency_paseo_spec(),
+						));
+					}
+					#[cfg(not(feature = "frequency-testnet"))]
+					return Err("Frequency Paseo runtime is not available.".into());
 				} else {
-					return Err("No chain spec is available.".into())
+					return Err("No chain spec is available.".into());
 				}
 			}
 			let path_buf = std::path::PathBuf::from(path);
@@ -118,39 +130,50 @@ fn load_spec(id: &str) -> std::result::Result<Box<dyn ChainSpec>, String> {
 			if ChainIdentity::Frequency == spec.identify() {
 				#[cfg(feature = "frequency")]
 				{
-					return Ok(Box::new(chain_spec::frequency::ChainSpec::from_json_file(path_buf)?))
+					return Ok(Box::new(chain_spec::frequency::ChainSpec::from_json_file(
+						path_buf,
+					)?));
 				}
 				#[cfg(not(feature = "frequency"))]
-				return Err("Frequency runtime is not available.".into())
+				return Err("Frequency runtime is not available.".into());
 			} else if ChainIdentity::FrequencyRococo == spec.identify() {
-				#[cfg(feature = "frequency-rococo-testnet")]
+				#[cfg(feature = "frequency-testnet")]
 				{
 					return Ok(Box::new(chain_spec::frequency_rococo::ChainSpec::from_json_file(
 						path_buf,
-					)?))
+					)?));
 				}
-				#[cfg(not(feature = "frequency-rococo-testnet"))]
-				return Err("Frequency Rococo runtime is not available.".into())
+				#[cfg(not(feature = "frequency-testnet"))]
+				return Err("Frequency Rococo runtime is not available.".into());
+			} else if ChainIdentity::FrequencyPaseo == spec.identify() {
+				#[cfg(feature = "frequency-testnet")]
+				{
+					return Ok(Box::new(chain_spec::frequency_paseo::ChainSpec::from_json_file(
+						path_buf,
+					)?));
+				}
+				#[cfg(not(feature = "frequency-testnet"))]
+				return Err("Frequency Paseo runtime is not available.".into());
 			} else if ChainIdentity::FrequencyLocal == spec.identify() {
-				#[cfg(feature = "frequency-rococo-local")]
+				#[cfg(feature = "frequency-local")]
 				{
-					return Ok(Box::new(chain_spec::frequency_rococo::ChainSpec::from_json_file(
+					return Ok(Box::new(chain_spec::frequency_paseo::ChainSpec::from_json_file(
 						path_buf,
-					)?))
+					)?));
 				}
-				#[cfg(not(feature = "frequency-rococo-local"))]
-				return Err("Frequency Local runtime is not available.".into())
+				#[cfg(not(feature = "frequency-local"))]
+				return Err("Frequency Local runtime is not available.".into());
 			} else if ChainIdentity::FrequencyDev == spec.identify() {
 				#[cfg(feature = "frequency-no-relay")]
 				{
-					return Ok(Box::new(chain_spec::frequency_rococo::ChainSpec::from_json_file(
+					return Ok(Box::new(chain_spec::frequency_paseo::ChainSpec::from_json_file(
 						path_buf,
-					)?))
+					)?));
 				}
 				#[cfg(not(feature = "frequency-no-relay"))]
-				return Err("Frequency Dev (no relay) runtime is not available.".into())
+				return Err("Frequency Dev (no relay) runtime is not available.".into());
 			} else {
-				return Err("Unknown chain spec.".into())
+				return Err("Unknown chain spec.".into());
 			}
 		},
 	}
@@ -231,7 +254,17 @@ impl SubstrateCli for RelayChainCli {
 	}
 
 	fn load_spec(&self, id: &str) -> std::result::Result<Box<dyn sc_service::ChainSpec>, String> {
-		polkadot_cli::Cli::from_iter([RelayChainCli::executable_name()].iter()).load_spec(id)
+		match id {
+			// TODO: Remove once on a Polkadot-SDK with Paseo-Local
+			#[cfg(feature = "frequency-local")]
+			"paseo-local" => return Ok(Box::new(chain_spec::frequency_paseo::load_paseo_local_spec())),
+			// TODO: Remove once on a Polkadot-SDK with Paseo
+			#[cfg(feature = "frequency-testnet")]
+			"paseo" => return Ok(Box::new(chain_spec::frequency_paseo::load_paseo_spec())),
+			_ =>
+				return polkadot_cli::Cli::from_iter([RelayChainCli::executable_name()].iter())
+					.load_spec(id),
+		}
 	}
 }
 
@@ -327,7 +360,7 @@ pub fn run() -> Result<()> {
 					} else {
 						return Err("Benchmarking wasn't enabled when building the node. \
 									You can enable it with `--features runtime-benchmarks`."
-							.into())
+							.into());
 					},
 				BenchmarkCmd::Block(cmd) => runner.sync_run(|config| {
 					let partials = new_partial(&config, false)?;
